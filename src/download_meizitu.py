@@ -127,7 +127,7 @@ def openPic(picURL):
         print("openPic Error:")
     return picURL_open[1]
  
-def picDownload(picURLs, page_num):
+def picDownload(picURLs, pageNum):
     download_img = ''
     dirs = os.listdir("D:\\douPIC")
     for picURL in picURLs:
@@ -139,21 +139,21 @@ def picDownload(picURLs, page_num):
                 downLoadImage(picURL, "D:\\douPIC\\%s" % (file_name))
                 #download_img = urllib.request.urlretrieve(picURL, "D:\\douPIC\\%s" % (file_name))
                 dirs.append(file_name)
-                print("第%d页 第%d张 ......%s......... downloaded" % (page_num+1, picURLs.index(picURL)+1, picURL[-15:]))
+                print("第%d页 第%d张 ......%s......... downloaded" % (pageNum+1, picURLs.index(picURL)+1, picURL[-15:]))
             else:
-                print("第%d页 第%d张 ......%s......... existed" % (page_num+1, picURLs.index(picURL)+1, picURL[-15:])) 
+                print("第%d页 第%d张 ......%s......... existed" % (pageNum+1, picURLs.index(picURL)+1, picURL[-15:])) 
             
         except:
-            print("Download Error:%s"%(picURL_new))
+            print("Download Error:%s"%(picURL))
     return download_img
  
 if __name__ == '__main__':
     num = 0
-    page_num = 0
+    pageNum = 0
     saveDir = "F:\\pyDownload\\"
     #downLoadImage("http://img3.douban.com/view/photo/photo/public/p2211076701.jpg","D://1.jpg")
     while True:
-        html = getHtml(r'http://www.meizitu.com/a/list_1_%d.html' % (page_num+1))
+        html = getHtml(r'http://www.meizitu.com/a/list_1_%d.html' % (pageNum+1))
         pageURLs = getPageURLs(html)
         for pageUrl in pageURLs:
             dirName = saveDir + pageUrl[pageUrl.rindex('/')+1:-5]+"\\"
@@ -166,8 +166,8 @@ if __name__ == '__main__':
                 picUrls = getPicURLs(getHtml(pageUrl));
                 for url in picUrls:
                     downLoadImage(url,dirName+url[url.rindex('/')+1:])
-        print("**************第%d页下载开始***************" % (page_num+1))
-        #picDownload(picURLs, page_num)
-        print("**************第%d页下载完成***************" % (page_num+1))
+        print("**************第%d页下载开始***************" % (pageNum+1))
+        #picDownload(picURLs, pageNum)
+        print("**************第%d页下载完成***************" % (pageNum+1))
         break
-        page_num += 1
+        pageNum += 1

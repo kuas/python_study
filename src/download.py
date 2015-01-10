@@ -5,12 +5,15 @@
 # @Link    : http://example.org
 # @Version : $Id$
  
-import os
-import urllib.request
-import re
-import time
-import random
 import _thread
+from http import cookiejar
+import os
+import random
+import re
+import threading
+import time
+import urllib.request
+
 
 userAgents = [{'User-Agent': 'Mozilla/5.0 (Windows NT 6.1; WOW64; rv:5.0) Gecko/20100101 Firefox/5.0'},
 	{"User-Agent": "Mozilla/5.0 (Windows; U; Windows NT 5.1; zh-CN; rv:1.9.1) Gecko/20090624 Firefox/3.5"},
@@ -39,7 +42,7 @@ userAgents = [{'User-Agent': 'Mozilla/5.0 (Windows NT 6.1; WOW64; rv:5.0) Gecko/
 	{"User-Agent":"Mozilla/5.0 (Windows; U; Windows NT 6.1; en-US) AppleWebKit/534.16 (KHTML, like Gecko) Chrome/10.0.648.133"},
 	{"User-Agent":"Mozilla/5.0 (compatible; MSIE 9.0; Windows NT 6.1; Win64; x64; Trident/5.0)"},
 	{"User-Agent":"Mozilla/5.0 (compatible; MSIE 9.0; Windows NT 6.1; WOW64; Trident/5.0)"},
-	{"User-Agent":"Mozilla/5.0 (X11; U; Linux x86_64; zh-CN; rv:1.9.2.10) Gecko/20100922 Ubuntu/10.10 (maverick) Firefox/3.6.10"},	
+	{"User-Agent":"Mozilla/5.0 (X11; U; Linux x86_64; zh-CN; rv:1.9.2.10) Gecko/20100922 Ubuntu/10.10 (maverick) Firefox/3.6.10"}, 	
 	{"User-Agent":"Mozilla/5.0 (compatible; MSIE 9.0; Windows NT 6.1; Trident/5.0)"},
 	{"User-Agent":"Mozilla/4.0 (compatible; MSIE 8.0; Windows NT 6.0; Trident/4.0)"},
 	{"User-Agent":"Mozilla/4.0 (compatible; MSIE 7.0; Windows NT 6.0)"},
@@ -47,101 +50,167 @@ userAgents = [{'User-Agent': 'Mozilla/5.0 (Windows NT 6.1; WOW64; rv:5.0) Gecko/
 	{"User-Agent":"Mozilla/5.0 (Macintosh; Intel Mac OS X 10.6; rv:2.0.1) Gecko/20100101"},
 	{"User-Agent":"Mozilla/5.0 (Windows NT 6.1; rv:2.0.1) Gecko/20100101 Firefox/4.0.1"}]
 
-header={"Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8",
-        "Accept-Encoding": "gzip, deflate, sdch",
-        "Cache-Control": "max-age=0",
-        "Accept-Language": "zh-cn,zh;q=0.8;",
-        "Connection": "keep-alive",
-        "Host": "www.douban.com",
-        "Referer": "http://www.douban.com",
-        "User-Agent": "Mozilla/5.0 (Windows NT 6.3; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko)"
-                      " Chrome/39.0.2171.95 Safari/537.36"
-        }
+pics = []
+urls = []
+openers = []
+exitFlag = 0
+SAVE_DIR = "D:\\douPIC\\"
 
-def randomUserAgent():
-    return random.choice(userAgents)["User-Agent"]
+# ActivityURL = "http://www.douban.com/online/11865076/album/137771083/?start=%d&sortby=time"
+# ActDir = "137771083\\"
+ActivityURL = "http://www.douban.com/online/11795374/album/134727795/?start=%d&sortby=popularity"
+ActDir = "11795374\\"
+ActivityURL = "http://www.douban.com/photos/album/64062043/?start=%d"
+ActDir = "64062043\\"
+
+PageSize = 18
+
+picLock = threading.Lock()
+urlLock = threading.Lock()
+pageNum = 0
+MaxPageNum = 10
+
+downPicCount = 10
+clawThreadCount = 1
 
 
+def getRandomHeaders():
+    headers = []
+    headers.append(("User-Agent", random.choice(userAgents)["User-Agent"]))
+    headers.append(("Accept-Language", "zh-cn,zh;q=0.8;"))
+    headers.append(("Cache-Control", "max-age=0"))
+    headers.append(("Accept", "text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8"))
+    return headers
 
-def downLoadImage(url,savePath):
-    u = urllib.request.URLopener()
-    u.addheaders = []
-    u.addheader("User-Agent",randomUserAgent())
-    u.addheader("Accept-Language", "zh-cn,zh;q=0.8;",)
-    u.addheader("Accept", "text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8")
-    f = u.open(url)
-    file = open(savePath,'wb')
-    file.write(f.read())
-    file.close()
-    f.close() 
- 
-def getHtml1(url):
-    req = urllib.request.Request(url, headers = header)
-    html = urllib.request.urlopen(req).read().decode('utf-8')
-    return html
- 
- 
+def initOpeners(openerCount):
+    for i in range(0,openerCount):
+        cj = cookiejar.CookieJar()
+        opener = urllib.request.build_opener(urllib.request.HTTPCookieProcessor(cj))
+        opener.addheaders = getRandomHeaders()
+        urllib.request.install_opener(opener)
+        openers.append(opener)
+        
+def getRandomOpener():
+    return random.choice(openers)
+
+def downLoadImage(url, savePath):
+    testCount = 0
+    while testCount < 3:
+        try:
+            f = getRandomOpener().open(url)
+            file = open(savePath, 'wb')
+            file.write(f.read())
+            file.close()
+            f.close() 
+            break
+        except Exception as e:
+            print("DownLoad image %s Error:%s"%(url,str(e)))
+            testCount += 1
+    
+    
 def getHtml(url):
-    print('*'*10,url)
-    u = urllib.request.URLopener()
-    u.addheaders = []
-    u.addheader("User-Agent",randomUserAgent())
-    u.addheader("Accept-Language", "zh-cn,zh;q=0.8;",)
-    u.addheader("Accept", "text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8")
-    f = u.open(url)
-    content = f.read().decode('utf-8')
-    f.close()
-    return content
- 
- 
+    testCount = 0
+    html = ""
+    while testCount < 3:
+        try:
+            f = getRandomOpener().open(url)
+            html = f.read().decode('utf-8')
+            f.close()
+            break
+        except Exception as e:
+            print("getHtml %s Error:%s"%(url,str(e)))
+            testCount += 1
+    return html
+
+class ClawThread(threading.Thread):
+    def __init__(self, name):
+        threading.Thread.__init__(self)
+        self.name = name
+    def run(self):
+        global urls,pageNum
+        while exitFlag == 0:
+            time.sleep(0.1 * random.randint(0, 10))
+            urlLock.acquire()
+            pUrl = ""
+            if len(urls) > 0:
+                pUrl = urls[0]
+                urls.remove(pUrl)
+            else:
+                if pageNum == MaxPageNum:
+                    break
+                endAddPage = pageNum + 5;
+                endAddPage = min(endAddPage,MaxPageNum)
+                while pageNum < endAddPage:
+                    urls.append(ActivityURL % (pageNum*PageSize))
+                    pageNum += 1
+            urlLock.release()
+            if pUrl != "":
+                html = getHtml(pUrl)
+                getPicURL(html)
+                
+
+
+class DownPicThread(threading.Thread):
+    def __init__(self, name):
+        threading.Thread.__init__(self)
+        self.name = name
+    def run(self):
+        global urls
+        while exitFlag == 0:
+            time.sleep(0.01 * random.randint(0, 10))
+            picLock.acquire()
+            picUrl = ""
+            if len(pics) > 0:
+                picUrl = pics[0]
+                pics.remove(picUrl)
+            picLock.release()
+            if picUrl != "":
+                fileName = picUrl[picUrl.rindex('/')+1:]
+                filePath = SAVE_DIR + ActDir + fileName
+                if not os.path.exists(filePath):
+                    downLoadImage(picUrl, filePath)
+            else:
+                if len(urls) == 0:
+                    break
+            
+
 def getPicURL(html):
     reg = r"http://img3.douban.com/view/photo/thumb/public/p\d+\.jpg"
-    #reg1 = r"http://www.douban.com/online/11865076/photo/\d+/\?sortby=time"
     picURLs = re.findall(reg, html)
-    urls = []
+    picLock.acquire()
     for picurl in picURLs:
-        urls.append(picurl.replace("thumb","photo"))
-    return urls
- 
-def openPic(picURL):
-    try:
-        html = getHtml(picURL)
-        reg = r'<img src="http://img\d{1}.douban.com/view/photo/photo/public/p\d{10}\.jpg"'
-        picURL = re.findall(reg, html)
-        #print(picURL)
-        picURL_open = picURL[0].split('"')
-    except:
-        print("openPic Error:")
-    return picURL_open[1]
- 
-def picDownload(picURLs, page_num):
-    download_img = ''
-    dirs = os.listdir("D:\\douPIC")
-    for picURL in picURLs:
-        try:
-            #picURL_new = openPic(picURL)
-            if picURL[-15:] not in dirs:
-                file_name = picURL[-15:]
-                
-                downLoadImage(picURL, "D:\\douPIC\\%s" % (file_name))
-                #download_img = urllib.request.urlretrieve(picURL, "D:\\douPIC\\%s" % (file_name))
-                dirs.append(file_name)
-                print("第%d页 第%d张 ......%s......... downloaded" % (page_num+1, picURLs.index(picURL)+1, picURL[-15:]))
-            else:
-                print("第%d页 第%d张 ......%s......... existed" % (page_num+1, picURLs.index(picURL)+1, picURL[-15:])) 
-            
-        except:
-            print("Download Error:%s"%(picURL_new))
-    return download_img
- 
+        pics.append(picurl.replace("thumb", "photo"))
+    picLock.release()
+
+
 if __name__ == '__main__':
-    num = 0
-    page_num = 0
-    #downLoadImage("http://img3.douban.com/view/photo/photo/public/p2211076701.jpg","D://1.jpg")
+    
+    initOpeners(10)
+    
+    threads = []
+    
+    if not os.path.exists(SAVE_DIR + ActDir):
+        os.mkdir(SAVE_DIR + ActDir)
+    
+    for i in range(0,downPicCount):
+        thread = DownPicThread("%d"%(i))
+        thread.start()
+        threads.append(thread)
+      
+    for i in range(0,clawThreadCount):
+        thread = ClawThread("%d"%(i))
+        thread.start()
+        threads.append(thread)    
+      
     while True:
-        html = getHtml(r'http://www.douban.com/online/11865076/album/137771083/?start=%d&sortby=time' % (num+page_num*90))
-        picURLs = getPicURL(html)
-        print("**************第%d页下载开始***************" % (page_num+1))
-        picDownload(picURLs, page_num)
-        print("**************第%d页下载完成***************" % (page_num+1))
-        page_num += 1
+        print("Downing:%d  ----------- Finished:%d"%(len(pics),len(os.listdir(SAVE_DIR + ActDir))))
+        ipt = input("input 'exit' to exit:")
+        if ipt == 'exit':
+            exitFlag = 1
+            break
+      
+    print("Waiting for all thread exit...")
+    for thread in threads:
+        thread.join()
+         
+
